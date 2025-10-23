@@ -3,3 +3,4 @@ ollama
 chromadb
 pandas
 requests
+litellm
