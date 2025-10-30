@@ -1,5 +1,9 @@
 import ipaddress
 
+import requests
+import os
+
+
 def lookup_threat(ip):
     """Enhanced local lookup that mimics a real threat intelligence check."""
     try:
