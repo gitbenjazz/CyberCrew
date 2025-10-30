@@ -6,21 +6,49 @@ from agents.network_engineer import create_network_engineer
 from agents.incident_commander import create_incident_commander
 import os
 
+
+from dotenv import load_dotenv
+
+env = os.getenv("ENV", "dev").lower()
+
+# Map environment to file
+env_file = {
+    "dev": ".env",
+    "prod": ".env",
+}.get(env)
+
+if env_file:
+    load_dotenv(dotenv_path=env_file,override=True)
+    print(f"env {env} loaded")
+
+else:
+    raise ValueError(f"Unknown environment: {env}")
+
+
 # === 1. Initialize LLM ===
 print("=== Initializing LLM ===")
 try:
-    ollama_llm = LLM(model="ollama/llama3")
-    print("✅ LLM configured: ollama/llama3")
+    if os.environ.get("MODEL_TO_USE") == "LLAMA":
+        model_llm = LLM(model="ollama/llama3")
+        print("✅ LLM configured: ollama/llama3")
+    elif os.environ.get("MODEL_TO_USE") == "OPENAI":
+        model_llm = LLM(
+            model=os.getenv("CREWAI_MODEL"), #"gpt-4o-mini",
+            api_key=os.getenv("OPENAI_API_KEY")  # expects env var
+        )
+        print("✅ LLM configured: gpt-4o-mini")
+
+
 except Exception as e:
     print("❌ Failed to initialize LLM:", e)
-    ollama_llm = None
+    model_llm = None
 
 # === 2. Create Agents ===
 print("=== Creating Agents ===")
-log_analyst = create_log_analyst(ollama_llm)
-threat_intel = create_threat_intel(ollama_llm)
-network_engineer = create_network_engineer(ollama_llm)
-incident_commander = create_incident_commander(ollama_llm)
+log_analyst = create_log_analyst(model_llm)
+threat_intel = create_threat_intel(model_llm)
+network_engineer = create_network_engineer(model_llm)
+incident_commander = create_incident_commander(model_llm)
 print("✅ All agents created with LLM attached")
 
 # === 3. Load Logs ===
