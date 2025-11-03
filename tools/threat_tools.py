@@ -3,8 +3,31 @@ import ipaddress
 import requests
 import os
 
+import requests
+import os
 
 def lookup_threat(ip):
+    api_key = os.getenv("c626c4a0046e589880dabea0e0bc70df4cd69e6eafda72e274ff1a2f47b58b161f1bdf98e990e939")
+    url = "https://api.abuseipdb.com/api/v2/check"
+    headers = {"Key": api_key, "Accept": "application/json"}
+    params = {"ipAddress": ip, "maxAgeInDays": 90}
+    
+    resp = requests.get(url, headers=headers, params=params)
+    data = resp.json()["data"]
+
+    return {
+        "ip": ip,
+        "reputation": (
+            "high" if data["abuseConfidenceScore"] > 75 else
+            "medium" if data["abuseConfidenceScore"] > 25 else
+            "low"
+        ),
+        "source": "AbuseIPDB",
+        "details": data.get("usageType", "unknown usage"),
+    }
+
+
+def lookup_threat_old(ip):
     """Enhanced local lookup that mimics a real threat intelligence check."""
     try:
         ip_obj = ipaddress.ip_address(ip)
