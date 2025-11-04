@@ -1,103 +1,106 @@
 # main.py
+import os
+from dotenv import load_dotenv
 from crewai import Crew, Task, LLM
 from agents.log_analyst import create_log_analyst
 from agents.threat_intel import create_threat_intel
 from agents.network_engineer import create_network_engineer
 from agents.incident_commander import create_incident_commander
-import os
 
-
-from dotenv import load_dotenv
-
+# === 0. Load Environment ===
 env = os.getenv("ENV", "dev").lower()
-
-# Map environment to file
-env_file = {
-    "dev": ".env",
-    "prod": ".env",
-}.get(env)
+env_file = { "dev": ".env", "prod": ".env" }.get(env)
 
 if env_file:
-    load_dotenv(dotenv_path=env_file,override=True)
-    print(f"env {env} loaded")
-
+    load_dotenv(dotenv_path=env_file, override=True)
+    print(f"🌱 Environment '{env}' loaded.")
 else:
     raise ValueError(f"Unknown environment: {env}")
 
+# === 1. Choose LLM source ===
+print("\n=== Choose LLM Provider ===")
+print("1️⃣  Ollama local model")
+print("2️⃣  OpenAI API")
+choice = input("Enter your choice [1/2]: ").strip()
 
-# === 1. Initialize LLM ===
-print("=== Initializing LLM ===")
+model_llm = None
+
 try:
-    if os.environ.get("MODEL_TO_USE") == "LLAMA":
-        model_llm = LLM(model="ollama/llama3")
-        print("✅ LLM configured: ollama/llama3")
-    elif os.environ.get("MODEL_TO_USE") == "OPENAI":
-        model_llm = LLM(
-            model=os.getenv("CREWAI_MODEL"), #"gpt-4o-mini",
-            api_key=os.getenv("OPENAI_API_KEY")  # expects env var
-        )
-        print("✅ LLM configured: gpt-4o-mini")
+    if choice == "1":
+        print("\nAvailable Ollama models:")
+        os.system("ollama list")
+        model_name = input("\nType the Ollama model name (e.g. llama3): ").strip() or "llama3"
 
+        model_llm = LLM(model=f"ollama/{model_name}")
+        print(f"✅ LLM configured: ollama/{model_name}")
+
+    elif choice == "2":
+        model_name = os.getenv("CREWAI_MODEL", "gpt-4o-mini")
+        api_key = os.getenv("OPENAI_API_KEY")
+
+        if not api_key:
+            raise ValueError("OPENAI_API_KEY not found in environment!")
+
+        model_llm = LLM(model=model_name, api_key=api_key)
+        print(f"✅ LLM configured: {model_name}")
+
+    else:
+        raise ValueError("Invalid choice. Please select 1 or 2.")
 
 except Exception as e:
-    print("❌ Failed to initialize LLM:", e)
-    model_llm = None
+    print(f"❌ Failed to initialize LLM: {e}")
+    exit(1)
 
 # === 2. Create Agents ===
-print("=== Creating Agents ===")
+print("\n=== Creating Agents ===")
 log_analyst = create_log_analyst(model_llm)
 threat_intel = create_threat_intel(model_llm)
 network_engineer = create_network_engineer(model_llm)
 incident_commander = create_incident_commander(model_llm)
-print("✅ All agents created with LLM attached")
+print("✅ All agents created successfully.")
 
 # === 3. Load Logs ===
 log_path = "data/sample_logs/auth.log"
 if os.path.exists(log_path):
-    print(f"📄 Loaded log file: {log_path}")
+    print(f"📄 Log file loaded: {log_path}")
 else:
     raise FileNotFoundError(f"❌ Log file not found: {log_path}")
 
 # === 4. Define Tasks ===
-
-# Step 1: Log Analyst parses the raw log file
 task_log_analysis = Task(
-    description=f"Analyze SSH logs in {log_path} and extract all suspicious IP addresses or failed login attempts.",
+    description=f"Analyze SSH logs in {log_path} and extract all suspicious IPs or failed login attempts.",
     agent=log_analyst,
     expected_output="A JSON list of suspicious IPs and users detected in the logs."
 )
 
-# Step 2: Threat Intel enriches the detected IPs
 task_threat_intel = Task(
-    description="Cross-reference the suspicious IPs with public threat intelligence databases "
+    description="Cross-reference suspicious IPs with public threat intelligence databases "
                 "and assign a reputation score (low, medium, high).",
     agent=threat_intel,
     expected_output="A JSON list of enriched IPs with reputation and risk context.",
-    context=[task_log_analysis],  # <── depends on previous task output
+    context=[task_log_analysis],
 )
 
-# Step 3: Network Engineer suggests mitigations
 task_network_mitigation = Task(
-    description="Generate firewall or ACL rules to block or mitigate threats "
-                "based on the reputation levels of suspicious IPs.",
+    description="Generate firewall or ACL rules to mitigate threats "
+                "based on IP reputation levels.",
     agent=network_engineer,
     expected_output="A JSON list of firewall rules or commands with reasons.",
     context=[task_threat_intel],
 )
 
-# Step 4: Incident Commander summarizes everything
 task_incident_report = Task(
-    description="Correlate all findings into a complete incident report including "
-                "the list of suspicious IPs, threat intel data, and mitigation actions.",
+    description="Summarize all findings into a Markdown incident report "
+                "including suspicious IPs, threat intel data, and mitigation actions.",
     agent=incident_commander,
-    expected_output="A Markdown-formatted incident report for management and SOC records.",
+    expected_output="Markdown-formatted incident report for management.",
     context=[task_network_mitigation],
 )
 
 tasks = [task_log_analysis, task_threat_intel, task_network_mitigation, task_incident_report]
 
 # === 5. Initialize Crew ===
-print("=== Initializing Crew ===")
+print("\n=== Initializing Crew ===")
 crew = Crew(
     agents=[log_analyst, threat_intel, network_engineer, incident_commander],
     tasks=tasks,
@@ -106,7 +109,7 @@ crew = Crew(
 )
 
 # === 6. Run Crew ===
-print("=== Running Crew ===")
+print("\n=== Running Crew ===")
 try:
     final_report = crew.kickoff()
 except Exception as e:
