@@ -3,11 +3,6 @@ import ipaddress
 import requests
 import os
 
-<<<<<<< HEAD
-=======
-import requests
-import os
->>>>>>> feature/OpenAI_switch
 
 def lookup_threat(ip):
     api_key = os.getenv("c626c4a0046e589880dabea0e0bc70df4cd69e6eafda72e274ff1a2f47b58b161f1bdf98e990e939")
