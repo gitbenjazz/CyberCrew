@@ -1,28 +1,67 @@
 import ipaddress
-
 import requests
 import os
 
-
 def lookup_threat(ip):
-    api_key = os.getenv("c626c4a0046e589880dabea0e0bc70df4cd69e6eafda72e274ff1a2f47b58b161f1bdf98e990e939")
-    url = "https://api.abuseipdb.com/api/v2/check"
-    headers = {"Key": api_key, "Accept": "application/json"}
-    params = {"ipAddress": ip, "maxAgeInDays": 90}
-    
-    resp = requests.get(url, headers=headers, params=params)
-    data = resp.json()["data"]
+    api_key = os.getenv("ABUSEIPDB_API_KEY")
+    if not api_key:
+        return {
+            "ip": ip,
+            "reputation": "unknown",
+            "source": "missing API key"
+        }
 
-    return {
-        "ip": ip,
-        "reputation": (
-            "high" if data["abuseConfidenceScore"] > 75 else
-            "medium" if data["abuseConfidenceScore"] > 25 else
-            "low"
-        ),
-        "source": "AbuseIPDB",
-        "details": data.get("usageType", "unknown usage"),
-    }
+    try:
+        url = "https://api.abuseipdb.com/api/v2/check"
+        headers = {"Key": api_key, "Accept": "application/json"}
+        params = {"ipAddress": ip, "maxAgeInDays": 90}
+
+        resp = requests.get(url, headers=headers, params=params, timeout=10)
+
+        # Defensive parsing
+        if resp.status_code != 200:
+            return {
+                "ip": ip,
+                "reputation": "unknown",
+                "source": f"HTTP {resp.status_code}",
+                "details": resp.text[:100]
+            }
+
+        json_data = resp.json()
+
+        print("DEBUG API response:", json_data)
+
+
+        if "data" not in json_data:
+            return {
+                "ip": ip,
+                "reputation": "unknown",
+                "source": "API format error",
+                "details": json_data
+            }
+
+        data = json_data["data"]
+        score = data.get("abuseConfidenceScore", 0)
+
+        return {
+            "ip": ip,
+            "reputation": (
+                "high" if score > 75 else
+                "medium" if score > 25 else
+                "low"
+            ),
+            "source": "AbuseIPDB",
+            "details": data.get("usageType", "unknown usage")
+        }
+
+    except Exception as e:
+        return {
+            "ip": ip,
+            "reputation": "unknown",
+            "source": "exception",
+            "details": str(e)
+        }
+
 
 
 def lookup_threat_old(ip):

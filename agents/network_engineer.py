@@ -1,33 +1,34 @@
-# agents/network_engineer.py
 from crewai import Agent
 from crewai.tools.base_tool import BaseTool
 from tools.network_tools import suggest_fix
 import json
+import re
 
 
 class SuggestFixTool(BaseTool):
     name: str = "suggest_fix"
     description: str = (
         "Generates firewall mitigation commands (iptables, ACLs, etc.) "
-        "to block or limit access from suspicious IP addresses."
+        "to block or limit access from suspicious IP addresses, "
+        "STRICTLY according to the provided severity level (low, medium, high)."
     )
 
     def _run(self, input_text: str) -> str:
         """
         Accepts either:
-          - a single IP (string)
-          - or a JSON/dict/list of multiple IPs (from the Threat Intel output)
+          - a JSON list/dict of IPs with reputation
+          - or unstructured text (fallback)
         Returns JSON with recommended mitigation commands.
         """
         try:
-            # Try to decode JSON input from previous agent
             data = json.loads(input_text)
         except Exception:
-            data = input_text  # if it’s raw text or a single IP
+            # fallback: extract IPs and assume low risk
+            ip_pattern = r"\b\d{1,3}(?:\.\d{1,3}){3}\b"
+            ips = re.findall(ip_pattern, str(input_text))
+            data = [{"ip": ip, "reputation": "low"} for ip in ips]
 
         actions = []
-
-        # Case 1: a list of IP dicts [{'ip': '1.2.3.4', 'reputation': 'high'}, ...]
         if isinstance(data, list):
             for item in data:
                 ip = item.get("ip")
@@ -35,17 +36,12 @@ class SuggestFixTool(BaseTool):
                 if ip:
                     actions.append(suggest_fix(ip, severity))
 
-        # Case 2: a dict of IPs {'203.0.113.56': 'high', '198.51.100.23': 'medium'}
         elif isinstance(data, dict):
             for ip, severity in data.items():
                 actions.append(suggest_fix(ip, severity))
 
-        # Case 3: a single IP (string)
-        elif isinstance(data, str) and data.strip():
-            actions.append(suggest_fix(data.strip()))
-
         else:
-            return "❌ No valid IPs provided to suggest_fix."
+            return json.dumps([{"error": "No valid IPs provided"}], indent=2)
 
         return json.dumps(actions, indent=2)
 
@@ -55,19 +51,20 @@ class SuggestFixTool(BaseTool):
 
 def create_network_engineer(llm):
     """
-    Factory function to create the Network Engineer agent.
-    This agent generates actionable remediation commands from threat data.
+    Factory for Network Engineer agent.
+    The agent simply calls suggest_fix() and outputs its JSON result without modification.
     """
     return Agent(
-        role="Network Engineer",
+        role="Network Automation Engineer",
         goal=(
-            "Generate firewall and ACL remediation commands to mitigate or block "
-            "threats based on the suspicious IPs and their severity."
+            "Convert IP reputation data into actionable network configurations. "
+            "Use the suggest_fix tool and OUTPUT ONLY its JSON results. "
+            "Do NOT make decisions beyond the severity mapping already handled by the tool."
         ),
         backstory=(
-            "You are a senior network security engineer skilled in defensive "
-            "infrastructure configuration across Cisco, Palo Alto, and Linux environments. "
-            "You translate risk assessments into precise network actions."
+            "You are a disciplined automation engineer. "
+            "Your job is to translate risk data into firewall commands deterministically. "
+            "You do NOT reason about threats — you only execute the suggest_fix tool output as-is."
         ),
         tools=[SuggestFixTool()],
         llm=llm,

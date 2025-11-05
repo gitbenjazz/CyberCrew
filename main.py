@@ -13,7 +13,7 @@ env_file = { "dev": ".env", "prod": ".env" }.get(env)
 
 if env_file:
     load_dotenv(dotenv_path=env_file, override=True)
-    print(f"🌱 Environment '{env}' loaded.")
+    print(f"Environment '{env}' loaded.")
 else:
     raise ValueError(f"Unknown environment: {env}")
 
@@ -50,6 +50,24 @@ try:
 except Exception as e:
     print(f"❌ Failed to initialize LLM: {e}")
     exit(1)
+
+# === Choose Temperature 
+# === 1.5 Choose Temperature ===
+print("\n=== Choose LLM Temperature ===")
+print("0️⃣  Deterministic (0.0) → Identical results, good for debugging")
+print("1️⃣  Balanced (0.2) → Slight flexibility, stable behavior")
+print("2️⃣  Creative (0.4) → More reasoning freedom, less consistency")
+choice_temp = input("Enter your choice [0/1/2]: ").strip()
+
+temp_map = {
+    "0": 0.0,
+    "1": 0.2,
+    "2": 0.4
+}
+temperature = temp_map.get(choice_temp, 0.2)
+print(f"🌡️  Temperature set to {temperature}")
+
+
 
 # === 2. Create Agents ===
 print("\n=== Creating Agents ===")
@@ -98,6 +116,20 @@ task_incident_report = Task(
 )
 
 tasks = [task_log_analysis, task_threat_intel, task_network_mitigation, task_incident_report]
+# === Verifier Input 
+
+
+def verify_inputs():
+    required_files = ["data/sample_logs/auth.log"]
+    for f in required_files:
+        if not os.path.exists(f):
+            raise FileNotFoundError(f"Missing required file: {f}")
+        if os.path.getsize(f) == 0:
+            raise ValueError(f"File is empty: {f}")
+    print("✅ Input verification passed")
+
+verify_inputs()
+
 
 # === 5. Initialize Crew ===
 print("\n=== Initializing Crew ===")
@@ -106,6 +138,7 @@ crew = Crew(
     tasks=tasks,
     verbose=True,
     tracing=True,
+    temperature=temperature 
 )
 
 # === 6. Run Crew ===
