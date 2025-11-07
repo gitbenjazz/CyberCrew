@@ -1,0 +1,51 @@
+# 📝 Project To-Do List
+
+## Reflexion
+- [ ] More threat intelligence api etc research and notes from labs
+
+## 🚀 Features
+- [x] Set up project repository
+- [ ] Log Analyst Extract IOCs (IPs, hashes, domains) from raw logs
+- [ ] Triage Priority
+- [ ] Collect siem to threat intelligence , collect logs - real time - Implement log summarization from SIEM feeds
+- [ ] Network and system engineer enhancement ( acl fwrules ise hardening patch vulnerability ...action rst connection …
+- [ ] Guardrails to check , hallucination reduction risk management
+- [ ] Adversarial manipulation, external attacks to modify the reasoning and the output 
+- [ ] care of Overfitting ( human action validation learning  ) increase trust - human in the loop
+- [ ] Predict Pattern
+- [ ] Rank risk for action suggested
+
+## ⚙️ Integrations
+- [ ] Connect assistant to Splunk API
+- [ ] Add JIRA / ServiceNow ticket creation support
+- [ ] Parse email alerts into structured inputs
+- [ ] Build Slack bot interface for quick queries
+
+## 🧰 Phase 3: Reporting & Automation
+- [ ] Generate incident summary reports (Markdown/PDF)
+- [ ] Create auto-response playbooks for common attack types
+- [ ] Evaluate red-team simulation results for improvement
+
+## 🧑‍💻 Phase 4: Experience & Knowledge
+- [ ] Add natural-language query layer for analysts
+- [ ] Implement a self-learning mechanism using past incidents
+- [ ] Develop dashboard for visualization and confidence metrics
+
+## 🧩 Stretch Goals
+- [ ] Integrate with MITRE ATT&CK framework
+- [ ] Add real-time anomaly detection using external ML model
+- [ ] Support multi-language analyst queries
+
+
+- [ ] Documentation
+- [ ] Detection, alert notification
+- [ ] Action ?
+
+## 🧪 Testing
+- [ ] ...
+
+
+
+
+
+
