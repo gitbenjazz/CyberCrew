@@ -17,39 +17,50 @@ if env_file:
 else:
     raise ValueError(f"Unknown environment: {env}")
 
-# === 1. Choose LLM source ===
-print("\n=== Choose LLM Provider ===")
-print("1️⃣  Ollama local model")
-print("2️⃣  OpenAI API")
-choice = input("Enter your choice [1/2]: ").strip()
 
 model_llm = None
 
-try:
-    if choice == "1":
-        print("\nAvailable Ollama models:")
-        os.system("ollama list")
-        model_name = input("\nType the Ollama model name (e.g. llama3): ").strip() or "llama3"
+if os.getenv("AUTO_INITIALIZE")=="TRUE" :
+    model_name = os.getenv("CREWAI_MODEL")
+    api_key = os.getenv("OPENAI_API_KEY")
+    if not api_key:
+        raise ValueError("OPENAI_API_KEY not found in environment!")
+    model_llm = LLM(model=model_name, api_key=api_key)
+    print(f"✅ LLM configured: {model_name}")
 
-        model_llm = LLM(model=f"ollama/{model_name}")
-        print(f"✅ LLM configured: ollama/{model_name}")
+else:
+    # === 1. Choose LLM source ===
+    print("\n=== Choose LLM Provider ===")
+    print("1️⃣  Ollama local model")
+    print("2️⃣  OpenAI API")
+    choice = input("Enter your choice [1/2]: ").strip()
 
-    elif choice == "2":
-        model_name = os.getenv("CREWAI_MODEL", "gpt-4o-mini")
-        api_key = os.getenv("OPENAI_API_KEY")
 
-        if not api_key:
-            raise ValueError("OPENAI_API_KEY not found in environment!")
+    try:
+        if choice == "1":
+            print("\nAvailable Ollama models:")
+            os.system("ollama list")
+            model_name = input("\nType the Ollama model name (e.g. llama3): ").strip() or "llama3"
 
-        model_llm = LLM(model=model_name, api_key=api_key)
-        print(f"✅ LLM configured: {model_name}")
+            model_llm = LLM(model=f"ollama/{model_name}")
+            print(f"✅ LLM configured: ollama/{model_name}")
 
-    else:
-        raise ValueError("Invalid choice. Please select 1 or 2.")
+        elif choice == "2":
+            model_name = os.getenv("CREWAI_MODEL", "gpt-4o-mini")
+            api_key = os.getenv("OPENAI_API_KEY")
 
-except Exception as e:
-    print(f"❌ Failed to initialize LLM: {e}")
-    exit(1)
+            if not api_key:
+                raise ValueError("OPENAI_API_KEY not found in environment!")
+
+            model_llm = LLM(model=model_name, api_key=api_key)
+            print(f"✅ LLM configured: {model_name}")
+
+        else:
+            raise ValueError("Invalid choice. Please select 1 or 2.")
+
+    except Exception as e:
+        print(f"❌ Failed to initialize LLM: {e}")
+        exit(1)
 
 # === Choose Temperature 
 # === 1.5 Choose Temperature ===
