@@ -20,7 +20,7 @@ def load_environment():
     if not env_file:
         raise ValueError(f"Unknown environment: {env}")
 
-    load_dotenv(dotenv_path=env_file, override=True)
+    load_dotenv(dotenv_path=env_file, override=False)
     print(f"Environment '{env}' loaded.")
 
 
