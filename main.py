@@ -1,5 +1,6 @@
 # main.py
 import os
+from datetime import datetime
 from dotenv import load_dotenv
 from crewai import Crew, Task, LLM
 
@@ -8,12 +9,13 @@ from agents.threat_intel import create_threat_intel
 from agents.network_engineer import create_network_engineer
 from agents.incident_commander import create_incident_commander
 
+from incident_storage.incident_manager import IncidentManager
 
-# -------------------------------------------------------
-# 0. Environment loading
-# -------------------------------------------------------
+
+# ======================================================
+#  ENVIRONMENT
+# ======================================================
 def load_environment():
-    """Load environment variables depending on ENV."""
     env = os.getenv("ENV", "dev").lower()
     env_file = {"dev": ".env", "prod": ".env"}.get(env)
 
@@ -24,30 +26,21 @@ def load_environment():
     print(f"Environment '{env}' loaded.")
 
 
-# -------------------------------------------------------
-# 1. Temperature handling
-# -------------------------------------------------------
+# ======================================================
+#  TEMPERATURE
+# ======================================================
 def get_temperature():
-    """Return pipeline temperature from env or default to 0.2."""
     try:
         return float(os.getenv("PIPELINE_TEMPERATURE", "0.2"))
     except ValueError:
-        print("⚠️ Invalid PIPELINE_TEMPERATURE value. Using default 0.2")
+        print("⚠️ Invalid PIPELINE_TEMPERATURE. Using 0.2")
         return 0.2
 
 
-# -------------------------------------------------------
-# 2. Model initialization (OpenAI default)
-# -------------------------------------------------------
+# ======================================================
+#  LLM
+# ======================================================
 def initialize_llm():
-    """
-    Initializes LLM using env variables:
-
-        LLM_PROVIDER = 'openai' | 'ollama'
-        CREWAI_MODEL = model name (gpt-4o-mini, llama3, etc.)
-
-    Default provider: openai
-    """
     provider = os.getenv("LLM_PROVIDER", "openai").lower()
     model_name = os.getenv("CREWAI_MODEL", "gpt-4o-mini")
 
@@ -55,25 +48,18 @@ def initialize_llm():
         print(f"Using local Ollama model: {model_name}")
         return LLM(model=f"ollama/{model_name}")
 
-    elif provider == "openai":
-        api_key = os.getenv("OPENAI_API_KEY")
-        if not api_key:
-            raise ValueError(
-                "OPENAI_API_KEY missing! You must export it before running the code."
-            )
-        print(f"Using OpenAI model: {model_name}")
-        return LLM(model=model_name, api_key=api_key)
+    api_key = os.getenv("OPENAI_API_KEY")
+    if not api_key:
+        raise ValueError("Missing OPENAI_API_KEY")
 
-    else:
-        raise ValueError(f"Invalid LLM_PROVIDER: {provider}")
+    print(f"Using OpenAI model: {model_name}")
+    return LLM(model=model_name, api_key=api_key)
 
 
-# -------------------------------------------------------
-# 3. Agent factory
-# -------------------------------------------------------
+# ======================================================
+#  AGENTS
+# ======================================================
 def create_agents(llm):
-    """Instantiate all agents with the selected LLM."""
-    print("\n=== Creating Agents ===")
     return {
         "log_analyst": create_log_analyst(llm),
         "threat_intel": create_threat_intel(llm),
@@ -82,76 +68,162 @@ def create_agents(llm):
     }
 
 
-# -------------------------------------------------------
-# 4. Main pipeline
-# -------------------------------------------------------
-def run_pipeline(log_path: str, temperature: float = None):
+# ======================================================
+#  OUTPUT EXTRACTOR (CrewAI 1.5+)
+# ======================================================
+def extract_output(output):
     """
-    Runs the 4-step CrewAI pipeline for a given log file.
-    This can be called by CLI, API or ingestion server.
+    output.raw_output = [{"role": "assistant", "content": "..."}]
     """
-    if not (os.path.exists(log_path) and os.path.getsize(log_path) > 0):
-        raise FileNotFoundError(f"Invalid or empty log file: {log_path}")
+    try:
+        return output.raw_output[-1]["content"]
+    except Exception:
+        return str(output)
 
-    # load environment + choose model
+
+# ======================================================
+#  REFERENCE GENERATION (Option A)
+# ======================================================
+def generate_reference() -> str:
+    # Example: INC-20251122-223015
+    return "INC-" + datetime.utcnow().strftime("%Y%m%d-%H%M%S")
+
+
+# ======================================================
+#  PIPELINE
+# ======================================================
+def run_pipeline(log_path: str, temperature: float = None):
+
+    if not os.path.exists(log_path):
+        raise FileNotFoundError(f"File not found: {log_path}")
+
     load_environment()
     llm = initialize_llm()
-
-    # temperature from caller OR from env
     if temperature is None:
         temperature = get_temperature()
 
+    incident_manager = IncidentManager()
+
+    # ---- Create incident with new schema ----
+    reference = generate_reference()
+    incident = incident_manager.create_incident(
+        reference=reference,
+        description=f"Ingestion from log file: {log_path}",
+        severity=None,  # we'll compute later from Threat Intel
+    )
+    incident_id = incident.id
+    print(f"🆕 Incident created: ID = {incident_id} | REF = {reference}")
+
     agents = create_agents(llm)
 
-    # Tasks
+    # ======================================================
+    # CALLBACKS
+    # ======================================================
+
+    # ---- Log Analyst ----
+    def cb_log(output):
+        final = extract_output(output)
+        incident_manager.add_event(
+            incident_id,
+            agent="Log Analyst",
+            event_type="log_analysis",
+            content=final,
+        )
+        return final
+
+    # ---- Threat Intel ----
+    def cb_intel(output):
+        final = extract_output(output)
+        incident_manager.add_event(
+            incident_id,
+            agent="Threat Intel",
+            event_type="threat_intel",
+            content=final,
+        )
+        # NOTE: later we can parse 'final' here to compute severity
+        return final
+
+    # ---- Network Engineer ----
+    def cb_mitigation(output):
+        final = extract_output(output)
+        incident_manager.add_event(
+            incident_id,
+            agent="Network Engineer",
+            event_type="mitigation",
+            content=final,
+        )
+        return final
+
+    # ---- Final report ----
+    def cb_final(output):
+        final = extract_output(output)
+        incident_manager.add_event(
+            incident_id,
+            agent="Incident Commander",
+            event_type="final_report",
+            content=final,
+        )
+        # Pipeline successfully completed
+        incident_manager.update_pipeline_status(incident_id, "completed")
+        return final
+
+    # ======================================================
+    # TASKS
+    # ======================================================
     task1 = Task(
         description=f"Analyze SSH logs in {log_path} and extract suspicious IPs.",
         agent=agents["log_analyst"],
-        expected_output="JSON list of suspicious IPs and users."
+        expected_output="JSON list of suspicious IPs.",
+        callback=cb_log,
     )
 
     task2 = Task(
-        description="Enrich suspicious IPs with threat intelligence feeds.",
+        description="Enrich suspicious IPs with threat intelligence.",
         agent=agents["threat_intel"],
-        expected_output="JSON with enriched IPs + reputation.",
+        expected_output="JSON enriched IP data.",
         context=[task1],
+        callback=cb_intel,
     )
 
     task3 = Task(
-        description="Generate firewall recommendations.",
+        description="Generate firewall mitigation actions.",
         agent=agents["network_engineer"],
-        expected_output="JSON list of ACL/Firewall mitigations.",
+        expected_output="JSON ACL/firewall commands.",
         context=[task2],
+        callback=cb_mitigation,
     )
 
     task4 = Task(
-        description="Create a Markdown incident report summarizing findings.",
+        description="Produce the final incident report.",
         agent=agents["incident_commander"],
-        expected_output="Markdown incident summary.",
+        expected_output="Markdown formatted incident report.",
         context=[task3],
+        callback=cb_final,
     )
 
-    # Crew
+    # ======================================================
+    # CREW
+    # ======================================================
     crew = Crew(
         agents=list(agents.values()),
         tasks=[task1, task2, task3, task4],
         verbose=True,
         tracing=True,
-        temperature=temperature
+        temperature=temperature,
     )
 
     print("\n=== Running CrewAI pipeline ===")
     return crew.kickoff()
 
 
-# -------------------------------------------------------
-# 5. CLI runner
-# -------------------------------------------------------
+# ======================================================
+# CLI
+# ======================================================
 if __name__ == "__main__":
     LOG_PATH = "data/sample_logs/auth.log"
     try:
         report = run_pipeline(LOG_PATH)
-        print("\n=== FINAL INCIDENT REPORT ===")
+        print("\n=== FINAL REPORT ===")
         print(report)
     except Exception as e:
         print("❌ Error:", e)
