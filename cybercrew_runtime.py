@@ -4,18 +4,24 @@ import os
 from datetime import datetime
 from crewai import Crew, Task, LLM
 
-# Agents (without incident_manager injection)
+# Agents
 from agents.log_analyst import create_log_analyst
 from agents.threat_intel import create_threat_intel
 from agents.network_engineer import create_network_engineer
 from agents.incident_commander import create_incident_commander
 
-# New Incident Storage
+# Incident Storage
 from incident_storage.incident_manager import IncidentManager
+
+# Threat Intel
+from tools.threat_tools import lookup_threat
+
+# Auto-Severity Engine
+from tools.severity_engine import compute_severity
 
 
 # ======================================================
-# Helper: extract content from TaskOutput (CrewAI 1.5+)
+# Helper: extract content from TaskOutput
 # ======================================================
 def extract_output(output):
     try:
@@ -25,17 +31,27 @@ def extract_output(output):
 
 
 # ======================================================
-# Helper: generate reference (INC-YYYYMMDD-HHMMSS)
+# Helper: generate reference
 # ======================================================
 def generate_reference():
     return "INC-" + datetime.utcnow().strftime("%Y%m%d-%H%M%S")
 
 
 # ======================================================
-# Runtime pipeline for a single LOG ENTRY (string)
+# Extract first IP from log
+# ======================================================
+def extract_ip(log: str):
+    for token in log.split():
+        if token.count(".") == 3:
+            return token.strip()
+    return None
+
+
+# ======================================================
+# Main runtime pipeline
 # ======================================================
 def analyze_log(log: str):
-    """Run a lightweight CyberCrew pipeline on a single log entry (string)."""
+    """Run CyberCrew pipeline on a single log entry."""
 
     # -------------------------------------------------------------
     # 1. Initialize LLM
@@ -52,7 +68,22 @@ def analyze_log(log: str):
         llm = LLM(model=model_name, api_key=api_key)
 
     # -------------------------------------------------------------
-    # 2. Create a new Incident in the DB
+    # 2. Threat Intel + Severity BEFORE pipeline
+    # -------------------------------------------------------------
+    ip = extract_ip(log)
+
+    if ip:
+        threat_info = lookup_threat(ip)
+    else:
+        threat_info = {"reputation": "unknown", "details": "No IP found"}
+
+    severity_info = compute_severity(log, threat_info)
+
+    print(f"🛡 Threat Intel: {threat_info}")
+    print(f"🔥 Auto-Severity: {severity_info}")
+
+    # -------------------------------------------------------------
+    # 3. Create Incident in DB
     # -------------------------------------------------------------
     incident_manager = IncidentManager()
 
@@ -60,109 +91,100 @@ def analyze_log(log: str):
     incident = incident_manager.create_incident(
         reference=reference,
         description="Runtime ingestion of a single log entry",
-        severity=None,   # severity computed later
+        severity=severity_info.get("severity"),
     )
     incident_id = incident.id
 
-    print(f"🆕 New runtime incident created: ID = {incident_id} | REF = {reference}")
+    print(f"🆕 New incident created: ID={incident_id} REF={reference}")
 
     # -------------------------------------------------------------
-    # 3. Create agents (NO incident_manager injection!)
+    # 4. Create Agents
     # -------------------------------------------------------------
     log_analyst = create_log_analyst(llm)
-    threat_intel = create_threat_intel(llm)
+    threat_intel_agent = create_threat_intel(llm)
     network_engineer = create_network_engineer(llm)
     incident_commander = create_incident_commander(llm)
 
     # -------------------------------------------------------------
-    # 4. Define internal callbacks to store events
+    # 5. Callbacks
     # -------------------------------------------------------------
     def cb_log(output):
         final = extract_output(output)
-        incident_manager.add_event(
-            incident_id,
-            agent="Log Analyst",
-            event_type="log_analysis",
-            content=final,
-        )
+        incident_manager.add_event(incident_id, "Log Analyst", "log_analysis", final)
         return final
 
     def cb_intel(output):
         final = extract_output(output)
-        incident_manager.add_event(
-            incident_id,
-            agent="Threat Intel",
-            event_type="threat_intel",
-            content=final,
-        )
+        incident_manager.add_event(incident_id, "Threat Intel", "threat_intel", final)
         return final
 
     def cb_mitigation(output):
         final = extract_output(output)
-        incident_manager.add_event(
-            incident_id,
-            agent="Network Engineer",
-            event_type="mitigation",
-            content=final,
-        )
+        incident_manager.add_event(incident_id, "Network Engineer", "mitigation", final)
         return final
 
     def cb_final(output):
         final = extract_output(output)
-        incident_manager.add_event(
-            incident_id,
-            agent="Incident Commander",
-            event_type="final_report",
-            content=final,
-        )
-        # Mark pipeline completed
+        incident_manager.add_event(incident_id, "Incident Commander", "final_report", final)
         incident_manager.update_pipeline_status(incident_id, "completed")
         return final
 
     # -------------------------------------------------------------
-    # 5. Define Tasks
+    # 6. Tasks (FIX: added expected_output)
     # -------------------------------------------------------------
     t1 = Task(
-        description=f"Analyze SSH log and extract suspicious indicators.\n\nLog entry:\n{log}",
+        description=f"Analyze the following SSH log:\n{log}",
+        expected_output="JSON list of extracted indicators (IPs, usernames, timestamps).",
         agent=log_analyst,
-        expected_output="JSON list of indicators (IPs, users, dates).",
         callback=cb_log,
     )
 
     t2 = Task(
-        description="Enrich indicators with threat intelligence.",
-        agent=threat_intel,
-        expected_output="JSON threat intel enrichment.",
+        description=f"Perform threat intelligence enrichment using: {threat_info}",
+        expected_output="JSON describing threat intel context (risk level, provider data).",
+        agent=threat_intel_agent,
         context=[t1],
         callback=cb_intel,
     )
 
     t3 = Task(
-        description="Generate firewall or ACL mitigation rules.",
+        description=f"Generate mitigation steps based on log + threat intel.\nLog: {log}\nThreat: {threat_info}",
+        expected_output="JSON containing recommended firewall/ACL/network mitigation actions.",
         agent=network_engineer,
-        expected_output="JSON firewall/ACL commands.",
         context=[t2],
         callback=cb_mitigation,
     )
 
     t4 = Task(
-        description="Produce an incident summary report.",
+        description=(
+            f"Produce final incident summary.\n"
+            f"Severity: {severity_info}\n"
+            f"Threat Intel: {threat_info}\n"
+            f"Log: {log}"
+        ),
+        expected_output="Markdown formatted final incident report.",
         agent=incident_commander,
-        expected_output="Markdown formatted incident summary.",
         context=[t3],
         callback=cb_final,
     )
 
     # -------------------------------------------------------------
-    # 6. Execute Crew
+    # 7. Execute Crew
     # -------------------------------------------------------------
     crew = Crew(
-        agents=[log_analyst, threat_intel, network_engineer, incident_commander],
+        agents=[log_analyst, threat_intel_agent, network_engineer, incident_commander],
         tasks=[t1, t2, t3, t4],
         verbose=True,
         tracing=True,
     )
 
-    report = crew.kickoff()
+    crew_report = crew.kickoff()
 
-    return report
+    return {
+        "incident_id": incident_id,
+        "reference": reference,
+        "ip": ip,
+        "severity": severity_info,
+        "threat_intel": threat_info,
+        "crew_report": crew_report,
+    }
