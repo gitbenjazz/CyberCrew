@@ -20,3 +20,4 @@ logs/
 venv/
 .python-version
 incident_storage/incidents.db
+incident_storage/incidents.db

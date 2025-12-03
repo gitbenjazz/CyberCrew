@@ -1,51 +1,154 @@
-# 📝 Project To-Do List
+# 📝 CyberCrew — Updated Project To-Do List (2025 
 
-## Reflexion
-- [ ] More threat intelligence api etc research and notes from labs
+## 🧠 Reflexion
+- [ ] Deep-dive research on additional threat intelligence APIs  
+      *Identify more sources (GreyNoise, SecurityTrails, Shodan, VirusTotal) to enrich threat context.*
+- [ ] Notes & results from threat-intel lab experiments  
+      *Document experiments and benchmark quality of intel providers.*
+- [ ] Evaluate long-term architecture (event-driven ingestion)  
+      *Explore Kafka / Redis queue-based ingestion for high-volume pipelines.*
 
-## 🚀 Features
-- [x] Set up project repository
-- [ ] Log Analyst Extract IOCs (IPs, hashes, domains) from raw logs
-- [ ] Triage Priority
-- [ ] Collect siem to threat intelligence , collect logs - real time - Implement log summarization from SIEM feeds
-- [ ] Network and system engineer enhancement ( acl fwrules ise hardening patch vulnerability ...action rst connection …
-- [ ] Guardrails to check , hallucination reduction risk management
-- [ ] Adversarial manipulation, external attacks to modify the reasoning and the output 
-- [ ] care of Overfitting ( human action validation learning  ) increase trust - human in the loop
-- [ ] Predict Pattern
-- [ ] Rank risk for action suggested
+---
 
-## ⚙️ Integrations
-- [ ] Connect assistant to Splunk API
-- [ ] Add JIRA / ServiceNow ticket creation support
-- [ ] Parse email alerts into structured inputs
-- [ ] Build Slack bot interface for quick queries
+# 🚀 Phase 1 — Core Pipeline Foundations (DONE)
 
-## 🧰 Phase 3: Reporting & Automation
-- [ ] Generate incident summary reports (Markdown/PDF)
-- [ ] Create auto-response playbooks for common attack types
-- [ ] Evaluate red-team simulation results for improvement
+- [x] Set up project repository  
+      *Initialize environment, structure folders, configure dependencies.*
+- [x] Implement baseline code refactor  
+      *Clean architecture, unify naming, prepare for modular agents.*
+- [x] Build CyberCrew runtime pipeline (CrewAI-based)  
+      *Full multi-agent pipeline orchestrated by CrewAI.*
+- [x] Integrate threat intel + severity engine  
+      *Run AbuseIPDB lookup + auto severity scoring before analysis.*
+- [x] Implement basic incident creation & DB schema  
+      *SQLite DB, Incident + Event tables, timestamping logic.*
+- [x] Implement log analysis tasks (4-agent pipeline)  
+      *Log Analyst → Threat Intel → Network Engineer → Incident Commander.*
+- [x] Build initial Incident Manager + event timeline  
+      *Storage of incident lifecycle and chronological events.*
 
-## 🧑‍💻 Phase 4: Experience & Knowledge
-- [ ] Add natural-language query layer for analysts
-- [ ] Implement a self-learning mechanism using past incidents
-- [ ] Develop dashboard for visualization and confidence metrics
+---
 
-## 🧩 Stretch Goals
-- [ ] Integrate with MITRE ATT&CK framework
-- [ ] Add real-time anomaly detection using external ML model
-- [ ] Support multi-language analyst queries
+# 🔥 Phase 2 — Ingestion & Collection (CURRENT PHASE)
 
+## **2.1 Ingestion Server**
+- [x] Build ingestion FastAPI server  
+      *Expose `/ingest/log` endpoint to receive logs from any source.*
+- [x] Add incident creation from ingestion  
+      *Each ingested log creates a structured incident in the DB.*
+- [x] Run LLM + threat intel checks from ingestion  
+      *Full CyberCrew pipeline triggered asynchronously.*
+- [x] Store events in DB  
+      *Timeline events added for analyst traceability.*
+- [x] Fix repeated log ingestion  
+      *Avoid duplicate processing of identical logs.*
+- [ ] Add proper input normalizer for raw logs  
+      *Clean syslog tags, timestamps, severity codes (RFC3164/5424).*
+- [x] Add background task processing (NEW)  
+      *Non-blocking ingestion, prevents syslog listener timeouts.*
+- [ ] Add rate-limiting & source validation  
+      *Protect ingestion server from flooding or spoofed sources.*
+- [ ] Add syslog-specific parsing  
+      *Extract host, facility, severity, message from syslog properly.*
 
-- [ ] Documentation
-- [ ] Detection, alert notification
-- [ ] Action ?
+## **2.2 Syslog Listener**
+- [x] Build UDP syslog listener  
+      *Capture real-time logs on port 5514 without root.*
+- [x] Forward syslog → ingestion server  
+      *Standardize log ingestion across push/pull sources.*
+- [x] Fix ingestion server timeouts  
+      *Immediate ACK + background processing architecture.*
+- [x] Validate end-to-end: syslog → ingestion → analysis → incident  
+      *Successful E2E with threat intel + severity + agent pipeline.*
+- [ ] Add TCP syslog support  
+      *Support persistent connections + RFC-compliant framing.*
+- [ ] Add TLS syslog support  
+      *Secure, encrypted syslog transport (RFC5425).*
 
-## 🧪 Testing
-- [ ] ...
+## **2.3 Log Collector Enhancements**
+- [x] Fix duplicate log processing  
+      *Prevent endless reprocessing of stable log files.*
+- [x] Implement offset storage  
+      *Track last processed byte for tailing log files.*
+- [ ] Multi-file log collection  
+      *Support `/var/log/auth.log`, `/var/log/syslog`, etc.*
+- [ ] Journald / Windows EventLog connectors  
+      *Extend ingestion beyond Linux text logs.*
+- [ ] Batch ingestion mode  
+      *Send logs in grouped bursts for performance.*
 
+---
 
+# 🤖 Phase 3 — Reporting & Automation
+- [ ] Generate incident summary reports (Markdown/PDF)  
+      *Produce clean, exportable summaries for SOC workflows.*
+- [ ] Auto-generate network ACLs / firewall rules  
+      *Turn agent mitigation output into real actionable configs.*
+- [ ] Build structured threat intel enrichment  
+      *Combine multiple intel sources for deeper context.*
+- [ ] Create auto-response playbooks  
+      *Automate response for common attack patterns.*
+- [ ] Add notification outputs (email, Slack, webhook)  
+      *Alert humans when incidents are generated.*
 
+---
 
+# 🧑‍💻 Phase 4 — Experience & Knowledge Layer
+- [ ] Add natural-language query layer (“Ask CyberCrew”)  
+      *Query threats, incidents, or logs in plain English.*
+- [ ] Implement self-learning mechanism from past incidents  
+      *Improve recommendations based on previous events.*
+- [ ] Build dashboard for visualization + confidence scoring  
+      *Overview of incidents, severity trends, threat patterns.*
+- [ ] Add “Human in the loop” validation  
+      *Allow analysts to approve or reject automated decisions.*
+- [ ] Add hallucination guardrails  
+      *Reduce incorrect LLM predictions with validation logic.*
 
+---
 
+# 🔌 Integrations
+- [ ] Connect to Splunk API  
+      *Pull logs directly from SIEM queries.*
+- [ ] Jira / ServiceNow ticket creation  
+      *Automatically open SOC tickets with incident data.*
+- [ ] Parse alert emails  
+      *Convert email-based alerts into structured incidents.*
+- [ ] Build Slack bot  
+      *Query CyberCrew or push alerts to analysts.*
+
+---
+
+# 🧩 Stretch Goals
+- [ ] MITRE ATT&CK mapping engine  
+      *Map logs + agent outputs to ATT&CK TTPs.*
+- [ ] Anomaly detection using ML  
+      *Model behavioral baselines to detect deviations.*
+- [ ] Multi-language analyst queries  
+      *Support French, English, etc.*
+
+---
+
+# 🗄️ Documentation & Reliability
+- [ ] Update architecture documentation  
+      *Document Phases 1–2–3 and ingestion flow.*
+- [ ] Detection + alert notification module  
+      *Define detection rules and alert triggers.*
+- [ ] CI/CD pipeline + tests  
+      *Automated quality + deployment pipeline.*
+
+---
+
+# 🧪 Testing
+- [ ] Unit tests for ingestion  
+      *Test `/ingest/log` with various input types.*
+- [ ] Unit tests for validator  
+      *Ensure correct behavior for edge-case logs.*
+- [ ] Unit tests for threat intel module  
+      *Mock API calls to validate logic.*
+- [ ] Integration test: syslog → ingestion → analysis  
+      *End-to-end behavioral correctness.*
+- [ ] Stress test ingestion server  
+      *Ensure scaling under thousands of logs/sec.*
+- [ ] DB integrity tests  
+      *Check incident/event creation & lifecycle stability.*
